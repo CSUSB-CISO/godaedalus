@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 )
 
 func prelimcheck() bool {
@@ -164,10 +166,29 @@ func disableBlankPassAccts() {
 }
 
 func findSUIDSGIDBits() {
-	cmd := "sudo find / -type f \\( -perm -04000 -o -perm -02000 \\)")
+	cmd := "sudo find / -type f \\( -perm -04000 -o -perm -02000 \\)"
 	out, err := exec.Command("bash", "-c", cmd).Output()
 	if err != nil {
 		fmt.Println(err)
 	}
 	fmt.Println(string(out))
 }
+
+func varLogPermissions() {
+	cmd := "ls -l /var/log"
+	out, err := exec.Command("bash", "-c", cmd).Output()
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(string(out))
+}
+
+//secureLocation -> full path of the secure sshd_config file
+func sshdConfigReplacement(secureLocation string) {
+	cmd := "cp " + secureLocation + "/etc/ssh/sshd_config"
+	_, err := exec.Command("bash", "-c", cmd).Output()
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
