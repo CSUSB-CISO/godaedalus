@@ -7,6 +7,9 @@ import (
 	"strings"
 )
 
+// Can look into listing all cronjobs, then sending this to web server
+// Can also look into storing config info (permissions for files, users, cronjobs, etc) into json file & then uploading that json file to the web server
+
 func prelimcheck() bool {
 	if os.Getegid() != 0 {
 		fmt.Println("You must run this as root")
@@ -47,25 +50,12 @@ func main() {
 
 		import baseline secure sshd config file and overwrite sshd_config file in place
 
-		Disable telnet
-		https://www.cyberciti.biz/faq/linux-disable-telnet-telnet-server-linux-command/
-
-		Disable rsh
-		https://www.cyberciti.biz/faq/linux-disable-rsh-rsh-server-linux-command/
-
-		Disable rlogin
-		https://www.cyberciti.biz/faq/linux-disable-rlogin-rlogin-server-linux-command/
 
 		Disable rcp
 		https://www.cyberciti.biz/faq/linux-disable-rcp-rcp-server-linux-command/
 
 		https://www.cyberciti.biz/faq/linux-disable-rshd-rshd-server-linux-command/
 
-		Disable rlogind
-		https://www.cyberciti.biz/faq/linux-disable-rlogind-rlogind-server-linux-command/
-
-		Disable rlogin
-		https://www.cyberciti.biz/faq/linux-disable-rlogin-rlogin-server-linux-command/
 
 		Limit failed login attempts
 		https://www.cyberciti.biz/faq/linux-limit-failed-login-attempts-linux-command/
@@ -114,18 +104,31 @@ func accessRootLogin() {
 	}
 }
 
-// Have to work on this to make it more robust, identify more package managers & ensure it is accurate
-func identifyPackageManager() {
-	fmt.Println("[+] Identifying package manager...")
-	supportedPackMan := []string{"apt", "yum", "pacman"}
-	for i:=0; i<len(supportedPackMan);i++ {
-		out, err := exec.Command("which", supportedPackMan[i]).Output()
-		if err != nil {
-			fmt.Println(err)
+
+func installPackages() {
+	packageNames := []string{"fail2ban", "auditd"}
+	fmt.Println("[+] Installing the following packages: ", packageNames)
+	packageManager := pacmanID()
+	for _, packName := range packageNames {
+	// check package manager, install package according to the package manager available
+		if packageManager == "yum" {
+			// may have to install epel-release before
+			result, _ := exec.Command("bash", "-c", "sudo yum install " + packName + " -y").Output()
+			fmt.Println(string(result))
+		} else if packageManager == "apt" {
+			result, _ := exec.Command("bash", "-c", "sudo apt install " + packName + " -y").Output()
+			fmt.Println(string(result))
+		} else if packageManager == "zypp" {
+			result, _ := exec.Command("bash", "-c", "sudo zypper install " + packName + " -y").Output()
+			fmt.Println(string(result))
+		} else if packageManager == "apk" {
+			result, _ := exec.Command("bash", "-c", "sudo apk add " + packName).Output()
+			fmt.Println(string(result))
+		} else if packageManager == "pacman" {
+			result, _ := exec.Command("bash", "-c", "sudo pacman -S " + packName + " -y").Output()
+			fmt.Println(string(result))
 		} else {
-			fmt.Println(string(out))
-			//_, err = exec.Command("sudo", supportedPackMan[i], "install", "fail2ban").Output()
-			//_, err = exec.Command("sudo", supportedPackMan[i], "install", "auditd", "audispd-plugins").Output()
+			fmt.Println("[!] Unknown package manager! Cannot install packages!")
 		}
 	}
 }
@@ -135,7 +138,7 @@ func setLoginAttempts() {
 	lockoutCmd := "sudo echo auth    required           pam_tally2.so onerr=fail deny=3 unlock_time=600 audit even_deny_root root_unlock_time=600 >> /etc/pam.d/common-auth"
 	_, err := exec.Command("bash", "-c", lockoutCmd).Output()
 	if err != nil {
-		fmt.Println("[-] Error encountered while setting up account lockout: ", err)
+		fmt.Println("[!] Error encountered while setting up account lockout: ", err)
 	}
 }
 
@@ -143,7 +146,7 @@ func setTcpSynCookies() {
 	fmt.Println("[+] Setting TCP Syn Cookies...")
 	_, err := exec.Command("sudo", "echo", "'net.ipv4.tcp_syncookies = 1'", ">>", "/etc/sysctl.conf").Output()
 	if err != nil {
-		fmt.Println("[-] Error encountered while setting up TCP SYN Cookies:", err)
+		fmt.Println("[!] Error encountered while setting up TCP SYN Cookies:", err)
 	}
 	_, err = exec.Command("sudo", "sysctl", "-p").Output()
 	if err != nil {
@@ -168,7 +171,7 @@ func disableBlankPassAccts() {
 	findCmd := "sudo getent shadow | grep '^[^:]*::' | cut -d: -f1"
 	out, err := exec.Command("bash", "-c", findCmd).Output()
 	if err != nil {
-		fmt.Println("[-] Error while finding accounts with blank passwords: ", err)
+		fmt.Println("[!] Error while finding accounts with blank passwords: ", err)
 	}
 	// iterate through each account w/blank password & disable it
 	for _, line := range strings.Split(strings.TrimSuffix(string(out), "\n"), "\n") {
@@ -177,7 +180,7 @@ func disableBlankPassAccts() {
 		disableCmd := "sudo usermod -L " + line
 		_, err = exec.Command("bash", "-c", disableCmd).Output()
 		if err != nil {
-			fmt.Println("[-] Error encountered when disabling account ", line, err)
+			fmt.Println("[!] Error encountered when disabling account ", line, err)
 		}
 	}
 }
@@ -187,7 +190,7 @@ func findSUIDSGIDBits() {
 	cmd := "sudo find / -type f \\( -perm -04000 -o -perm -02000 \\)"
 	out, err := exec.Command("bash", "-c", cmd).Output()
 	if err != nil {
-		fmt.Println("[-] Error encountered while checking file permissions. Error: ", err)
+		fmt.Println("[!] Error encountered while checking file permissions. Error: ", err)
 	}
 	fmt.Println("SUID/SGID bits: ", string(out))
 }
@@ -201,7 +204,7 @@ func checkFilePermissions() {
 	for _, file := range files {
 		perms, err := exec.Command("bash", "-c", varLogCmd + file).Output()
 		if err != nil {
-			fmt.Println("[-] Error encountered while checking file permissions. Error: ", err)
+			fmt.Println("[!] Error encountered while checking file permissions. Error: ", err)
 		}
 		fmt.Println(string(perms))
 	}
@@ -223,7 +226,7 @@ func sshdConfigReplacement(secureLocation string) {
 func disableRSH(filepath string) {
 	ogConfigContent, err := os.ReadFile(filepath)
 	if err != nil {
-		fmt.Println("Error encountered while disabling RSH: ", err)
+		fmt.Println("[!] Error encountered while disabling RSH: ", err)
 	}
 	newConfigFile := strings.Replace(string(ogConfigContent), "    disable = no", "    disable = yes", -1)
 	// Golang will auto overwrite file if it already exists
@@ -233,4 +236,87 @@ func disableRSH(filepath string) {
 	}
 	fileHandle.WriteString(string(newConfigFile))
 	fileHandle.Close()
+}
+
+
+// returns installed package manager
+// uses **which <package manager>** to identify if it's installed
+func pacmanID() string {
+	packMans := []string{"yum", "zypp", "apk", "apt", "pacman"}
+	for _, manager := range packMans {
+		// if package manager is installed, it'll return the absolute path to it
+		cmd := "which " + manager
+		result, _ := exec.Command("bash", "-c", cmd).Output()
+		if strings.Contains(string(result), "/") {
+			fmt.Println("[+] Package manager identified: " + manager)
+			return manager
+		}
+	}
+	return ""
+}
+
+
+
+//Uninstall Insecure Services
+//Should do more research about how service names vary per package manager to ensure this will work correctly
+func removeInsecureServices() {
+	//TODO: differentiate between different package managers
+	uninstallCmds := []string{"yum erase xinetd ypserv tftp-server telnet-server rsh-server -y", "sudo apt-get --purge remove xinetd nis yp-tools tftpd atftpd tftpd-hpa telnetd rsh-server rsh-redone-server -y", "sudo zypper rm xinetd telnetd rsh-server -y", "sudo pacman -Rcns xinetd telnetd rsh-server tftp-server tftpd-hpa -y", "sudo apk del xinetd telnetd rsh-server tftpd-server tftpd-hpa -y"}
+	installedPacMan := pacmanID()
+	if installedPacMan == "apt" {
+		result, _ := exec.Command("bash", "-c", uninstallCmds[1]).Output()
+		fmt.Println(string(result))
+	} else if installedPacMan == "yum" {
+		result, _ := exec.Command("bash", "-c", uninstallCmds[0]).Output()
+		fmt.Println(string(result))
+	} else if installedPacMan == "zypp" {
+		result, _ := exec.Command("bash", "-c", uninstallCmds[2]).Output()
+		fmt.Println(string(result))
+	} else if installedPacMan == "pacman" {
+		result, _ := exec.Command("bash", "-c", uninstallCmds[3]).Output()
+		fmt.Println(string(result))
+	} else if installedPacMan == "apk" {
+		result, _ := exec.Command("bash", "-c", uninstallCmds[4]).Output()
+		fmt.Println(string(result))
+	} else {
+		fmt.Println("[!] Unable to identify package manager on system!")
+	}
+
+}
+
+// ok, bool
+func contains(elements []string, v string) bool {
+	for _, s := range elements {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// Can also iterate through each file permission in bin dir & check for SUID bit set
+func disableSUIDBits() {
+	exploitableSUIDs := []string{"ab", "agetty", "alpine", "ar", "arj", "arp", "as", "ascii-xfr", "ash", "aspell", "atomb", "awk", "base32", "base64", "basenc", "basez", "bash", "bridge", "busybox", "bzip2", "capsh", "cat", "chmod", "choom", "chown", "chroot", "cmp", "column", "comm", "cp", "cpio", "cpulimit", "csh", "csplit", "csvtool", "cupsfilter", "curl", "cut", "dash", "date", "dd", "dialog", "diff", "dig", "dmsetup", "docker", "dosbox", "ed", "efax", "emacs", "env", "eqn", "expand", "expect", "file", "find", "fish", "flock", "fmt", "fold", "gawk", "gcore", "gdb", "genie", "genisoimage", "gimp", "grep", "gtester", "gzip", "gtester", "gzip", "hd", "head", "hexdump", "highlight", "hping3", "iconv", "install", "ionice", "ip", "ispell", "jjs", "join", "jq", "jrunscript", "ksh", "ksshell", "kubectl", "ld.so", "less", "logsave", "look", "lua", "make", "mawk", "more", "mosquitto", "msgattrib", "msgcat", "msgconv", "msgfilter", "msgmerge", "msguniq", "multitime", "mv", "nasm", "nawk", "nft", "nice", "nl", "nm", "nmap", "node", "nohup", "od", "openssl", "openvpn", "paste", "perf", "perl", "pg", "php", "pidstat", "pr", "ptx", "python", "readelf", "restic", "rev", "rlwrap", "rsync", "run-parts", "rview", "rvim", "sash", "scanmem", "sed", "setarch", "setfacl", "shuf", "soelim", "sort", "sqlite3", "ss", "ssh-keygen", "ssh-keyscan", "sshpass", "start-stop-daemon", "stdbuf", "strace", "strings", "sysctl", "systemctl", "tac", "tail", "taskset", "tbl", "tclsh", "tee", "tftp", "tic", "time", "timeout", "troff", "ul", "unexpand", "uniq", "unshare", "unzip", "update-alternatives", "unndecode", "unnencode", "view", "vigr", "vim", "vimdiff", "vipw", "match", "wc", "wget", "whiptail", "xargs", "xdotool", "xmodmap", "xmore", "xxd", "xz", "yash", "zsh", "zsoelim"}
+	findSUIDBinariesCmd := "sudo find / -perm /4000"
+	suidBinaries, _ := exec.Command("bash", "-c", findSUIDBinariesCmd).Output()
+	suidBinariesSlice := strings.Split(string(suidBinaries), "\n")
+	for _, binary := range suidBinariesSlice {
+		// if the current element we're on is in the list of exploitable suid binaries, we resolve it
+		if contains(exploitableSUIDs, binary) {
+			_, _ = exec.Command("bash", "-c", "sudo chmod u-s " + binary).Output()
+		}
+	}
+}
+
+func disableSGIDBits() {
+	exploitableSGIDs := []string{"ab", "agetty", "alpine", "ar", "arj", "arp", "as", "ascii-xfr", "ash", "aspell", "atomb", "awk", "base32", "base64", "basenc", "basez", "bash", "bridge", "busybox", "bzip2", "capsh", "cat", "chmod", "choom", "chown", "chroot", "cmp", "column", "comm", "cp", "cpio", "cpulimit", "csh", "csplit", "csvtool", "cupsfilter", "curl", "cut", "dash", "date", "dd", "dialog", "diff", "dig", "dmsetup", "docker", "dosbox", "ed", "efax", "emacs", "env", "eqn", "expand", "expect", "file", "find", "fish", "flock", "fmt", "fold", "gawk", "gcore", "gdb", "genie", "genisoimage", "gimp", "grep", "gtester", "gzip", "gtester", "gzip", "hd", "head", "hexdump", "highlight", "hping3", "iconv", "install", "ionice", "ip", "ispell", "jjs", "join", "jq", "jrunscript", "ksh", "ksshell", "kubectl", "ld.so", "less", "logsave", "look", "lua", "make", "mawk", "more", "mosquitto", "msgattrib", "msgcat", "msgconv", "msgfilter", "msgmerge", "msguniq", "multitime", "mv", "nasm", "nawk", "nft", "nice", "nl", "nm", "nmap", "node", "nohup", "od", "openssl", "openvpn", "paste", "perf", "perl", "pg", "php", "pidstat", "pr", "ptx", "python", "readelf", "restic", "rev", "rlwrap", "rsync", "run-parts", "rview", "rvim", "sash", "scanmem", "sed", "setarch", "setfacl", "shuf", "soelim", "sort", "sqlite3", "ss", "ssh-keygen", "ssh-keyscan", "sshpass", "start-stop-daemon", "stdbuf", "strace", "strings", "sysctl", "systemctl", "tac", "tail", "taskset", "tbl", "tclsh", "tee", "tftp", "tic", "time", "timeout", "troff", "ul", "unexpand", "uniq", "unshare", "unzip", "update-alternatives", "unndecode", "unnencode", "view", "vigr", "vim", "vimdiff", "vipw", "match", "wc", "wget", "whiptail", "xargs", "xdotool", "xmodmap", "xmore", "xxd", "xz", "yash", "zsh", "zsoelim"}
+	findSGIDBinariesCmd := "sudo find / -perm /2000"
+	sGidBinaries, _ := exec.Command("bash", "-c", findSGIDBinariesCmd).Output()
+	sGidBinariesSlice := strings.Split(string(sGidBinaries), "\n")
+	for _, binary := range sGidBinariesSlice {
+		// if the current element we're on is in the list of exploitable suid binaries, we resolve it
+		if contains(exploitableSGIDs, binary) {
+			_, _ = exec.Command("bash", "-c", "sudo chmod g-s " + binary).Output()
+		}
+	}
 }
