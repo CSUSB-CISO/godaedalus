@@ -84,7 +84,7 @@ func Telnet() {
 		log.Fatal(err)
 	}
 */
-url := ("https://raw.githubusercontent.com/CSUSB-CISO/godaedalus/main/Configurations/telnet")
+	url := ("https://raw.githubusercontent.com/CSUSB-CISO/godaedalus/main/Configurations/telnet")
 
 	trequest, err := http.Get(url)
 	if err != nil {
