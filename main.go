@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"net/http"
+	"ioioutil"
 	"os/exec"
 	"strings"
 )
@@ -69,46 +71,72 @@ func main() {
 		Generate audit records for certain commands
 		https://www.cyberciti.biz/faq/linux-audit-records-for-certain-commands-linux-command/
 
-
-
-
-	*/
+		possibly just remove these shit services: https://www.cyberciti.biz/tips/linux-security.html
+*/
 
 }
 
-//possibly just remove these shit services: https://www.cyberciti.biz/tips/linux-security.html
+func ssh() {
+	fmt.Println("[+] Hardening SSH...")
+	chown1 := ("sudo chown root /etc/ssh/ssh_config")
+	chown2 := ("sudo chown root /etc/ssh/sshd_config")
+	chmod1 := ("sudo chmod 644 /etc/ssh/ssh_config")
+	chmod2 := ("sudo chmod 644 /etc/ssh/sshd_config")
+	_, err := exec.Command("bash", "-c", chown1).Output()
+	_, err := exec.Command("bash", "-c", chown2).Output()
+	_, err := exec.Command("bash", "-c", chmod1).Output()
+	_, err := exec.Command("bash", "-c", chmod2).Output()
 
-func Telnet() {
-/*	err := os.Create("telnet")
+}
+
+func fail2ban() {
+	
+}
+
+func telnet() {
+	fmt.Println("[+] Configuring Telnet...")
+
+	telUrl := ("https://raw.githubusercontent.com/CSUSB-CISO/godaedalus/main/Configurations/telnet")
+	oldConfig := ("/home/OLD_TELNET")
+	originalEtc := ("/etc/xinetd.d/telnet")
+
+	telRequest, err := http.Get(telUrl)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println("[!] Error configuring telnet while grabbing new telnet file from repo.")
 	}
-*/
-	url := ("https://raw.githubusercontent.com/CSUSB-CISO/godaedalus/main/Configurations/telnet")
 
-	trequest, err := http.Get(url)
+	telBody, err := ioutil.ReadAll(telRequest.Body)
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Println("[!] Error configuring telnet while reading http request.")
 	}
 
-	tbody, err := ioutil.ReadAll(trequest.Body)
-	if err != nil {
-		log.Fatalln(err)
-	}
+	file2write := []byte(string(telBody))
 
-	file2write := []byte(string(tbody))
-
-	/*what, err := os.Write(file2write)
-	if err != nil {
-		log.Fatalln(err)
-	}
-*/
 
 	os.WriteFile("telnet", []byte(file2write), 0644)
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Println("[!] Error configuring telnet while writing new telnet to file.")
 	}
 
+	bytesRead, err := os.ReadFile(oEtc)
+	if err != nil{
+		fmt.Println("[!] Error configuring telnet while reading original telnet path.")
+	}
+
+	err = os.WriteFile(oldEtc, []byte(bytesRead), 0644)
+	if err != nil {
+		fmt.Println("[!] Error configuring telnet while copying old telnet to new path.")
+	}
+
+	bytesRead1, err := os.ReadFile("telnet")
+	if err != nil {
+		fmt.Println("[!] Error configuring telnet while reading new telnet file.")
+	}
+
+	os.WriteFile(oEtc, []byte(bytesRead1), 0644)
+	if err != nil {
+		fmt.Println("[!] Error configuring telnet while reading original telnet path")
+	} 
 }
 
 
